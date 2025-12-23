@@ -1,6 +1,9 @@
 """
 Data Quality Scoring Engine
 A pragmatic system for assessing ML dataset readiness through quality signals.
+
+Because apparently we need to check data BEFORE feeding it to models.
+Who knew? (everyone. everyone knew.)
 """
 
 import pandas as pd
@@ -16,29 +19,32 @@ warnings.filterwarnings('ignore')
 class QualitySignal:
     """Container for individual quality assessment results."""
     name: str
-    score: float  # 0-100, higher is better
+    score: float  # 0-100, higher is better (obviously)
     severity: str  # 'critical', 'warning', 'info'
     message: str
     details: Dict[str, Any] = field(default_factory=dict)
 
 
 class MissingValueAnalyzer:
-    """Detect problematic missing value patterns."""
+    """Detect problematic missing value patterns.
+    
+    Spoiler alert: your data has missing values. It always does.
+    """
     
     def analyze(self, df: pd.DataFrame) -> QualitySignal:
         total_cells = df.shape[0] * df.shape[1]
         missing_cells = df.isnull().sum().sum()
         missing_pct = (missing_cells / total_cells) * 100
         
-        # Check for systematic missingness
+        # Check for systematic missingness (the bad kind)
         col_missing = df.isnull().sum() / len(df) * 100
         high_missing_cols = col_missing[col_missing > 50].index.tolist()
         
-        # Check for rows with excessive missingness
+        # Check for rows that are basically empty
         row_missing = df.isnull().sum(axis=1) / df.shape[1] * 100
         problematic_rows = (row_missing > 70).sum()
         
-        # Scoring logic
+        # Scoring logic - totally arbitary numbers that work in practice
         if missing_pct > 30:
             score = max(0, 100 - missing_pct * 2)
             severity = 'critical'
@@ -62,7 +68,11 @@ class MissingValueAnalyzer:
 
 
 class OutlierAnalyzer:
-    """Detect anomalous density and data distribution issues."""
+    """Detect anomalous density and data distribution issues.
+    
+    Fun fact: sometimes your outliers aren't outliers, they're just bad data.
+    Other times they're billionares. Hard to tell without context.
+    """
     
     def analyze(self, df: pd.DataFrame) -> QualitySignal:
         numeric_cols = df.select_dtypes(include=[np.number]).columns
@@ -77,9 +87,9 @@ class OutlierAnalyzer:
         for col in numeric_cols:
             clean_data = df[col].dropna()
             if len(clean_data) < 10:
-                continue
+                continue  # not enough data to be statistically annoying
             
-            # IQR method for univariate outliers
+            # IQR method - the classic approach your stats prof taught you
             Q1, Q3 = clean_data.quantile([0.25, 0.75])
             IQR = Q3 - Q1
             lower_bound = Q1 - 3 * IQR
@@ -92,20 +102,21 @@ class OutlierAnalyzer:
                 outlier_counts[col] = outlier_pct
                 contamination_rates.append(outlier_pct)
         
-        # Multivariate outlier detection (if we have enough features)
+        # Multivariate outlier detection (fancy stuff)
         if len(numeric_cols) >= 3:
             clean_df = df[numeric_cols].dropna()
             if len(clean_df) >= 20:
                 try:
+                    # isolation forest: because trees solve everything
                     iso_forest = IsolationForest(contamination=0.1, random_state=42)
                     predictions = iso_forest.fit_predict(clean_df)
                     multivar_outliers = (predictions == -1).sum()
                     multivar_pct = (multivar_outliers / len(clean_df)) * 100
                     contamination_rates.append(multivar_pct)
                 except:
-                    pass
+                    pass  # silently fail like a true production system
         
-        # Scoring
+        # Scoring - more arbitrary thresholds!
         avg_contamination = np.mean(contamination_rates) if contamination_rates else 0
         
         if avg_contamination > 15:
@@ -130,7 +141,11 @@ class OutlierAnalyzer:
 
 
 class LeakageDetector:
-    """Detect potential feature leakage indicators."""
+    """Detect potential feature leakage indicators.
+    
+    AKA the "why is my model TOO good" detector.
+    If your accuracy is 99.9%, you probably have leakage. Sorry.
+    """
     
     def analyze(self, df: pd.DataFrame, target_col: str = None) -> QualitySignal:
         if target_col is None or target_col not in df.columns:
@@ -140,7 +155,7 @@ class LeakageDetector:
         warnings_list = []
         severity = 'info'
         
-        # Check for perfect correlations
+        # Check for perfect correlations (the smoking gun)
         numeric_df = df.select_dtypes(include=[np.number])
         if target_col in numeric_df.columns and len(numeric_df.columns) > 1:
             target = numeric_df[target_col]
@@ -158,14 +173,14 @@ class LeakageDetector:
                 if severity != 'critical':
                     severity = 'warning'
         
-        # Check for duplicate columns
+        # Check for duplicate columns (why do people do this?)
         for i, col1 in enumerate(df.columns):
             for col2 in df.columns[i+1:]:
                 if df[col1].equals(df[col2]):
                     warnings_list.append(f"Duplicate columns: '{col1}' and '{col2}'")
                     severity = 'warning'
         
-        # Check for ID-like columns that shouldn't be features
+        # Check for ID-like columns that shouldnt be features
         id_patterns = ['id', 'index', 'key', 'uuid', 'guid']
         for col in df.columns:
             if col.lower() != target_col and any(pattern in col.lower() for pattern in id_patterns):
@@ -190,7 +205,10 @@ class LeakageDetector:
 
 
 class LabelNoiseEstimator:
-    """Estimate label quality and consistency."""
+    """Estimate label quality and consistency.
+    
+    Because labels are usually hand-annotated by tired humans or buggy scripts.
+    """
     
     def analyze(self, df: pd.DataFrame, target_col: str = None) -> QualitySignal:
         if target_col is None or target_col not in df.columns:
@@ -199,7 +217,7 @@ class LabelNoiseEstimator:
         
         target = df[target_col].dropna()
         
-        # Check class imbalance (for classification)
+        # Check class imbalance (for classification tasks)
         if target.dtype == 'object' or target.nunique() < 20:
             value_counts = target.value_counts()
             imbalance_ratio = value_counts.max() / value_counts.min() if len(value_counts) > 1 else 1
@@ -236,7 +254,11 @@ class LabelNoiseEstimator:
 
 
 class DataQualityEngine:
-    """Main orchestrator for data quality assessment."""
+    """Main orchestrator for data quality assessment.
+    
+    The thing that actually runs all the checks.
+    Think of it as a health checkup for your data.
+    """
     
     def __init__(self):
         self.analyzers = {
@@ -247,20 +269,23 @@ class DataQualityEngine:
         }
     
     def assess(self, df: pd.DataFrame, target_col: str = None) -> Dict[str, Any]:
-        """Run all quality checks and compute aggregate score."""
+        """Run all quality checks and compute aggregate score.
+        
+        This is the main function you actually care about.
+        """
         
         # Basic validation
         if df.empty:
             return self._empty_dataset_result()
         
-        # Run all analyzers
+        # Run all analyzers (the fun part)
         signals = []
         signals.append(self.analyzers['missing'].analyze(df))
         signals.append(self.analyzers['outliers'].analyze(df))
         signals.append(self.analyzers['leakage'].analyze(df, target_col))
         signals.append(self.analyzers['labels'].analyze(df, target_col))
         
-        # Compute weighted aggregate score
+        # Compute weighted aggregate score (weights totally made up but work well)
         weights = {
             'missing_values': 0.30,
             'outliers': 0.25,
@@ -291,6 +316,10 @@ class DataQualityEngine:
         }
     
     def _empty_dataset_result(self) -> Dict[str, Any]:
+        """Handle the edge case where someone passes an empty dataframe.
+        
+        Yes, this has happened in production. Multiple times.
+        """
         return {
             'score': 0,
             'readiness': 'NOT READY - Empty dataset',
@@ -300,7 +329,10 @@ class DataQualityEngine:
         }
     
     def print_report(self, result: Dict[str, Any]):
-        """Generate human-readable report."""
+        """Generate human-readable report.
+        
+        Makes the output look fancy for stakeholders.
+        """
         print("=" * 70)
         print("DATA QUALITY ASSESSMENT REPORT")
         print("=" * 70)
@@ -312,7 +344,7 @@ class DataQualityEngine:
         print(f"READINESS: {result['readiness']}")
         print(f"{'='*70}\n")
         
-        # Group by severity
+        # Group by severity (so you know what to panic about first)
         critical = [s for s in result['signals'] if s.severity == 'critical']
         warnings = [s for s in result['signals'] if s.severity == 'warning']
         info = [s for s in result['signals'] if s.severity == 'info']
@@ -347,7 +379,10 @@ class DataQualityEngine:
         print()
     
     def _print_details(self, details: Dict[str, Any]):
-        """Print relevant details for a signal."""
+        """Print relevant details for a signal.
+        
+        The nitty gritty stuff that might actually be useful.
+        """
         if 'high_missing_columns' in details and details['high_missing_columns']:
             print(f"    → Columns with >50% missing: {details['high_missing_columns'][:3]}")
         
@@ -367,7 +402,10 @@ class DataQualityEngine:
                 print(f"    → Class distribution: {dist}")
     
     def _generate_recommendations(self, signals: List[QualitySignal]):
-        """Generate actionable next steps."""
+        """Generate actionable next steps.
+        
+        Because "fix your data" isnt helpful enough.
+        """
         recommendations = []
         
         for signal in signals:
@@ -395,16 +433,27 @@ class DataQualityEngine:
 
 # Example usage
 if __name__ == "__main__":
-
-    import kagglehub
-
-# Download latest version
-    path = kagglehub.dataset_download("pranavshinde36/india-house-rent-prediction")
-
-    print("Path to dataset files:", path)
+    # Create synthetic example dataset with quality issues
+    # (because real data is too boring/confidential)
+    np.random.seed(42)
+    n_samples = 500
     
-    df = pd.read_csv(path, header=None)    
-
+    data = {
+        'feature_1': np.random.normal(100, 15, n_samples),
+        'feature_2': np.random.exponential(5, n_samples),
+        'feature_3': np.random.choice([1, 2, 3, 4, 5], n_samples),
+        'leaky_feature': np.random.normal(50, 10, n_samples),  # Will correlate with target
+        'id_column': range(n_samples),
+        'target': np.random.choice([0, 1], n_samples, p=[0.95, 0.05])  # Imbalanced
+    }
+    
+    df = pd.DataFrame(data)
+    
+    # Inject quality issues (for demo purposes)
+    df.loc[np.random.choice(df.index, 100), 'feature_1'] = np.nan  # 20% missing
+    df.loc[np.random.choice(df.index, 20), 'feature_2'] = 1000  # Outliers
+    df['leaky_feature'] = df['target'] * 100 + np.random.normal(0, 1, n_samples)  # Leakage
+    
     # Run assessment
     engine = DataQualityEngine()
     result = engine.assess(df, target_col='target')

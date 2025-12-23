@@ -1,0 +1,91 @@
+================================================================================
+DATA QUALITY ASSESSMENT REPORT
+================================================================================
+
+Dataset: House_Rent_Dataset.csv
+Shape: 7,691 rows × 10 columns
+Target: rent
+
+OVERALL SCORE: 88.5/100
+READINESS: READY - Dataset is production-grade
+
+================================================================================
+DETAILED FINDINGS
+================================================================================
+
+[MISSING_VALUES] Score: 100.0/100 (info)
+Message: Acceptable missingness: 0.0% missing values
+Details:
+  total_missing_pct: 0.0
+  high_missing_columns: []
+
+[OUTLIERS] Score: 60.005200884150305/100 (warning)
+Message: Moderate outliers: 10.0% anomalies detected
+Details:
+  columns_with_outliers: {}
+  avg_contamination_pct: 9.998699778962424
+
+[LEAKAGE] Score: 100/100 (info)
+Message: No obvious leakage indicators
+Details:
+  warnings: []
+
+[LABEL_NOISE] Score: 90/100 (info)
+Message: Continuous target with CV=1.78
+Details:
+  coefficient_variation: 1.7778979032900355
+
+================================================================================
+COLUMN SUMMARY
+================================================================================
+
+house_type:
+  Type: object
+  Missing: 0.0%
+  Unique: 5467
+
+locality:
+  Type: object
+  Missing: 0.0%
+  Unique: 1984
+
+city:
+  Type: object
+  Missing: 0.0%
+  Unique: 5
+
+area:
+  Type: float64
+  Missing: 0.0%
+  Unique: 1114
+
+beds:
+  Type: int64
+  Missing: 0.0%
+  Unique: 9
+
+bathrooms:
+  Type: int64
+  Missing: 0.0%
+  Unique: 11
+
+balconies:
+  Type: int64
+  Missing: 0.0%
+  Unique: 10
+
+furnishing:
+  Type: object
+  Missing: 0.0%
+  Unique: 3
+
+area_rate:
+  Type: float64
+  Missing: 0.0%
+  Unique: 333
+
+rent:
+  Type: float64
+  Missing: 0.0%
+  Unique: 294
+
